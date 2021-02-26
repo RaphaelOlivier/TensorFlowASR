@@ -147,16 +147,16 @@ def backward_dp(bp_diags, tp_diags, batch_size, input_max_len, target_max_len, l
     return beta
 
 
-def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length):
-    batch_size = tf.shape(logits)[0]
-    input_max_len = tf.shape(logits)[1]
-    target_max_len = tf.shape(logits)[2]
-    vocab_size = tf.shape(logits)[3]
+def compute_rnnt_loss_and_grad_helper(log_probs, labels, label_length, logit_length):
+    batch_size = tf.shape(log_probs)[0]
+    input_max_len = tf.shape(log_probs)[1]
+    target_max_len = tf.shape(log_probs)[2]
+    vocab_size = tf.shape(log_probs)[3]
 
     one_hot_labels = tf.one_hot(tf.tile(tf.expand_dims(labels, axis=1),
                                         multiples=[1, input_max_len, 1]), depth=vocab_size)
 
-    log_probs = tf.nn.log_softmax(logits)
+    # log_probs = tf.nn.log_softmax(logits)
     blank_probs, truth_probs = transition_probs(one_hot_labels, log_probs)
     bp_diags = extract_diagonals(blank_probs)
     tp_diags = extract_diagonals(truth_probs)
@@ -235,6 +235,7 @@ def rnnt_loss_tf(logits, labels, label_length, logit_length, name=None):
     name = "rnnt_loss" if name is None else name
     with tf.name_scope(name):
         logits = tf.convert_to_tensor(logits, name="logits")
+        logits = tf.nn.log_softmax(logits)
         labels = tf.convert_to_tensor(labels, name="labels")
         label_length = tf.convert_to_tensor(label_length, name="label_length")
         logit_length = tf.convert_to_tensor(logit_length, name="logit_length")
@@ -242,13 +243,13 @@ def rnnt_loss_tf(logits, labels, label_length, logit_length, name=None):
         args = [logits, labels, label_length, logit_length]
 
         @tf.custom_gradient
-        def compute_rnnt_loss_and_grad(logits_t, labels_t, label_length_t, logit_length_t):
+        def compute_rnnt_loss_and_grad(log_probs_t, labels_t, label_length_t, logit_length_t):
             """Compute RNN-T loss and gradients."""
-            logits_t.set_shape(logits.shape)
+            log_probs_t.set_shape(log_probs_t.shape)
             labels_t.set_shape(labels.shape)
             label_length_t.set_shape(label_length.shape)
             logit_length_t.set_shape(logit_length.shape)
-            kwargs = dict(logits=logits_t, labels=labels_t, label_length=label_length_t, logit_length=logit_length_t)
+            kwargs = dict(log_probs=log_probs_t, labels=labels_t, label_length=label_length_t, logit_length=logit_length_t)
             result = compute_rnnt_loss_and_grad_helper(**kwargs)
 
             def grad(grad_loss):
